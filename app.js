@@ -50,23 +50,16 @@ const dom = {
   btnRecenter: document.getElementById('btn-recenter'),
   btnTrackHeading: document.getElementById('btn-track-heading'),
   compassBtnIcon: document.getElementById('compass-btn-icon'),
-  headingBtnText: document.getElementById('heading-btn-text'),
   btnLabel: document.getElementById('btn-label'),
   headerStatus: document.getElementById('header-status'),
   statusDot: document.getElementById('status-dot'),
-  pingIndicator: document.getElementById('ping-indicator'),
+  stageTitle: document.getElementById('stage-title'),
   metricDistance: document.getElementById('metric-distance'),
   metricDistanceUnit: document.getElementById('metric-distance-unit'),
-  compassNeedle: document.getElementById('compass-needle'),
-  metricBearing: document.getElementById('metric-bearing'),
-  compassCardinal: document.getElementById('compass-cardinal'),
   metricAccuracy: document.getElementById('metric-accuracy'),
-  accuracyLevel: document.getElementById('accuracy-level'),
   badgeValidation: document.getElementById('badge-validation'),
   btnSimulatePoi: document.getElementById('btn-simulate-poi'),
-  simulateLabel: document.getElementById('simulate-label'),
   errorBanner: document.getElementById('error-banner'),
-  errorTitle: document.getElementById('error-title'),
   errorMsg: document.getElementById('error-msg'),
   btnCloseError: document.getElementById('btn-close-error')
 };
@@ -274,14 +267,15 @@ function stopGeolocation() {
   releaseWakeLock();
 
   // Mise à jour de l'UI
-  dom.btnLabel.textContent = "Activer la géolocalisation";
-  dom.btnToggleGps.classList.remove('bg-slate-700', 'hover:bg-slate-800');
-  dom.btnToggleGps.classList.add('bg-indigo-600', 'hover:bg-indigo-700');
-  dom.btnRecenter.classList.add('hidden');
+  if (dom.btnLabel) dom.btnLabel.textContent = "Activer la géolocalisation";
+  if (dom.btnToggleGps) {
+    dom.btnToggleGps.classList.remove('bg-slate-800', 'active:bg-slate-900');
+    dom.btnToggleGps.classList.add('bg-indigo-600', 'active:bg-indigo-700');
+  }
+  if (dom.btnRecenter) dom.btnRecenter.classList.add('hidden');
   
-  dom.headerStatus.textContent = "GPS Inactif";
-  dom.statusDot.className = "relative inline-flex rounded-full h-3 w-3 bg-amber-500";
-  dom.pingIndicator.classList.add('hidden');
+  if (dom.headerStatus) dom.headerStatus.textContent = "GPS Inactif";
+  if (dom.statusDot) dom.statusDot.className = "w-2 h-2 rounded-full bg-amber-400";
 }
 
 // --- 7. Callbacks de Géolocalisation ---
@@ -430,63 +424,32 @@ function centerOnUser() {
 // --- 9. Mises à jour de l'Interface Utilisateur (UI) ---
 
 function updateUiStarting() {
-  dom.btnLabel.textContent = "Arrêter le suivi GPS";
-  dom.btnToggleGps.classList.remove('bg-indigo-600', 'hover:bg-indigo-700');
-  dom.btnToggleGps.classList.add('bg-slate-700', 'hover:bg-slate-800');
-  dom.btnRecenter.classList.remove('hidden');
+  if (dom.btnLabel) dom.btnLabel.textContent = "Arrêter le GPS";
+  if (dom.btnToggleGps) {
+    dom.btnToggleGps.classList.remove('bg-indigo-600', 'active:bg-indigo-700');
+    dom.btnToggleGps.classList.add('bg-slate-800', 'active:bg-slate-900');
+  }
+  if (dom.btnRecenter) dom.btnRecenter.classList.remove('hidden');
 
-  dom.headerStatus.textContent = "Acquisition GPS...";
-  dom.statusDot.className = "relative inline-flex rounded-full h-3 w-3 bg-amber-500";
-  dom.pingIndicator.classList.remove('hidden');
+  if (dom.headerStatus) dom.headerStatus.textContent = "Recherche...";
+  if (dom.statusDot) dom.statusDot.className = "w-2 h-2 rounded-full bg-amber-400 animate-pulse";
 }
 
 function updateUiWithMetrics() {
-  // Statut général dans l'en-tête
-  dom.headerStatus.textContent = "GPS Actif (Haute Précision)";
-  dom.statusDot.className = "relative inline-flex rounded-full h-3 w-3 bg-emerald-500";
-  dom.pingIndicator.classList.remove('hidden');
+  if (dom.headerStatus) dom.headerStatus.textContent = "GPS Actif";
+  if (dom.statusDot) dom.statusDot.className = "w-2 h-2 rounded-full bg-emerald-400";
 
-  // Affichage de la précision
-  dom.metricAccuracy.textContent = state.userAccuracy;
-  
-  if (state.userAccuracy <= 10) {
-    dom.accuracyLevel.textContent = "Signal Excellent";
-    dom.accuracyLevel.className = "text-[10px] font-semibold text-emerald-600 mt-0.5";
-  } else if (state.userAccuracy <= 25) {
-    dom.accuracyLevel.textContent = "Signal Bon";
-    dom.accuracyLevel.className = "text-[10px] font-semibold text-blue-600 mt-0.5";
-  } else {
-    dom.accuracyLevel.textContent = "Signal Moyen / Imprécis";
-    dom.accuracyLevel.className = "text-[10px] font-semibold text-amber-600 mt-0.5";
-  }
+  // Précision
+  if (dom.metricAccuracy) dom.metricAccuracy.textContent = state.userAccuracy;
 
   // Formatage de la distance
-  if (state.distanceToPoi >= 1000) {
-    dom.metricDistance.textContent = (state.distanceToPoi / 1000).toFixed(2);
-    dom.metricDistanceUnit.textContent = "km";
-  } else {
-    dom.metricDistance.textContent = state.distanceToPoi;
-    dom.metricDistanceUnit.textContent = "m";
-  }
-
-  // Calcul et affichage du cap vers la cible (Aiguille de boussole)
-  if (state.userLatLng) {
-    const bearingToPoi = Math.round(
-      calculateBearing(
-        state.userLatLng[0],
-        state.userLatLng[1],
-        CONFIG.POI_COORDS[0],
-        CONFIG.POI_COORDS[1]
-      )
-    );
-    if (dom.compassNeedle) {
-      dom.compassNeedle.style.transform = `rotate(${bearingToPoi}deg)`;
-    }
-    if (dom.metricBearing) {
-      dom.metricBearing.textContent = `${bearingToPoi}°`;
-    }
-    if (dom.compassCardinal) {
-      dom.compassCardinal.textContent = getCardinalDirection(bearingToPoi);
+  if (dom.metricDistance) {
+    if (state.distanceToPoi >= 1000) {
+      dom.metricDistance.textContent = (state.distanceToPoi / 1000).toFixed(2);
+      if (dom.metricDistanceUnit) dom.metricDistanceUnit.textContent = "km";
+    } else {
+      dom.metricDistance.textContent = state.distanceToPoi;
+      if (dom.metricDistanceUnit) dom.metricDistanceUnit.textContent = "m";
     }
   }
 
@@ -504,8 +467,10 @@ function updateUiWithMetrics() {
  * Déclenchement de la validation quand l'utilisateur est à ≤ 30m
  */
 function triggerValidationSuccess() {
-  dom.badgeValidation.textContent = "Étape Validée ! 🎉";
-  dom.badgeValidation.className = "px-3 py-1 rounded-full text-xs font-bold bg-emerald-500 text-white shadow-md shadow-emerald-500/30 transition-all duration-300";
+  if (dom.badgeValidation) {
+    dom.badgeValidation.textContent = "Validé ! 🎉";
+    dom.badgeValidation.className = "font-bold text-emerald-600";
+  }
 
   // Retouche visuelle du cercle POI pour le passer au vert
   if (state.poiCircle) {
@@ -526,15 +491,17 @@ function triggerValidationSuccess() {
 }
 
 function triggerWaitingState() {
-  dom.badgeValidation.textContent = "En approche";
-  dom.badgeValidation.className = "px-3 py-1 rounded-full text-xs font-bold bg-amber-100 text-amber-800 border border-amber-200";
+  if (dom.badgeValidation) {
+    dom.badgeValidation.textContent = "En approche";
+    dom.badgeValidation.className = "font-bold text-slate-500";
+  }
 
   // Réinitialisation du style du cercle POI
   if (state.poiCircle) {
     state.poiCircle.setStyle({
       color: '#e11d48',
       fillColor: '#f43f5e',
-      fillOpacity: 0.18,
+      fillOpacity: 0.22,
       dashArray: '5, 8'
     });
   }
@@ -543,13 +510,12 @@ function triggerWaitingState() {
 }
 
 function showError(title, msg) {
-  dom.errorTitle.textContent = title;
-  dom.errorMsg.textContent = msg;
-  dom.errorBanner.classList.remove('hidden');
+  if (dom.errorMsg) dom.errorMsg.textContent = msg;
+  if (dom.errorBanner) dom.errorBanner.classList.remove('hidden');
 }
 
 function hideError() {
-  dom.errorBanner.classList.add('hidden');
+  if (dom.errorBanner) dom.errorBanner.classList.add('hidden');
 }
 
 // --- 10. Gestion du Maintien de l'Écran (Wake Lock API) ---
@@ -730,22 +696,14 @@ function updateHeadingButtonUi(isActive) {
   if (!dom.btnTrackHeading) return;
 
   if (isActive) {
-    dom.btnTrackHeading.className = "px-3.5 py-2.5 bg-indigo-600 text-white rounded-2xl shadow-lg shadow-indigo-500/30 border border-indigo-400 flex items-center space-x-2 active:scale-95 transition-all";
-    if (dom.headingBtnText) {
-      dom.headingBtnText.textContent = "Cap actif";
-      dom.headingBtnText.className = "text-xs font-bold text-white";
-    }
+    dom.btnTrackHeading.className = "w-11 h-11 bg-indigo-600 text-white rounded-full shadow-lg shadow-indigo-500/30 border border-indigo-400 flex items-center justify-center active:scale-90 transition-all";
     if (dom.compassBtnIcon) {
-      dom.compassBtnIcon.className = "w-4 h-4 text-amber-300 transition-transform duration-150";
+      dom.compassBtnIcon.className = "w-5 h-5 text-amber-300 transition-transform duration-150";
     }
   } else {
-    dom.btnTrackHeading.className = "px-3.5 py-2.5 bg-white/95 backdrop-blur-md text-slate-700 rounded-2xl shadow-lg border border-white/60 flex items-center space-x-2 active:scale-95 transition-all hover:bg-white";
-    if (dom.headingBtnText) {
-      dom.headingBtnText.textContent = "Suivre le cap";
-      dom.headingBtnText.className = "text-xs font-bold text-slate-700";
-    }
+    dom.btnTrackHeading.className = "w-11 h-11 bg-white/95 backdrop-blur-md text-slate-700 rounded-full shadow-lg border border-white/60 flex items-center justify-center active:scale-90 transition-all hover:bg-white";
     if (dom.compassBtnIcon) {
-      dom.compassBtnIcon.className = "w-4 h-4 text-indigo-600 transition-transform duration-300";
+      dom.compassBtnIcon.className = "w-5 h-5 text-indigo-600 transition-transform duration-300";
       dom.compassBtnIcon.style.transform = "rotate(0deg)";
     }
   }

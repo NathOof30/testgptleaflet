@@ -1,18 +1,17 @@
 /* ==========================================================================
-   Styles personnalisés pour le prototype de Jeu de Piste GPS Mobile
-   Rendu Cartographique 2D Haute Définition & Pion Vectoriel
+   Styles Mobiles Épurés (Mobile-First GPS HUD)
    ========================================================================== */
 
 /* Gestion des zones sécurisées (Notch / Barre d'accueil iPhone & Android) */
 .safe-top {
-  padding-top: max(0.75rem, env(safe-area-inset-top));
+  padding-top: max(0.5rem, env(safe-area-inset-top));
 }
 
 .safe-bottom {
-  padding-bottom: max(1rem, env(safe-area-inset-bottom));
+  padding-bottom: max(0.5rem, env(safe-area-inset-bottom));
 }
 
-/* Optimisation de l'affichage mobile */
+/* Optimisation tactile mobile */
 html, body {
   height: 100%;
   width: 100%;
@@ -23,19 +22,7 @@ html, body {
   background-color: #0f172a;
 }
 
-/* ==========================================================================
-   1. Conteneur Carte Plein Écran (Zéro bords noirs, zéro distorsion)
-   ========================================================================== */
-.board-viewport {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  overflow: hidden;
-  z-index: 0;
-}
-
-/* Carte Leaflet plein écran propre et nette */
+/* Carte en plein écran total */
 #map {
   position: absolute;
   inset: 0;
@@ -44,24 +31,9 @@ html, body {
   outline: none;
 }
 
-/* Filtre subtil pour réchauffer les teintes de la carte (effet satiné/plateau) */
-.leaflet-tile-pane {
-  filter: contrast(105%) saturate(112%);
-}
-
-/* Suppression du flou brumeux qui masquait le haut de la carte */
-.tilt-shift-fog {
-  display: none !important;
-}
-
 /* ==========================================================================
-   2. Pion Personnalisé (Rendu 2D net, SANS effet de perspective)
+   Pion Joueur 2D (Net, vertical, sans perspective)
    ========================================================================== */
-
-/* 
- * Le pion est affiché comme un sprite 2D pur, vertical et ultra-net.
- * Aucune rotation 3D ni distorsion trapézoïdale de perspective.
- */
 .board-pion {
   transform-origin: center bottom;
   filter: drop-shadow(0px 8px 6px rgba(0, 0, 0, 0.35));
@@ -70,24 +42,16 @@ html, body {
   -webkit-user-drag: none;
 }
 
-/* Balise POI redressée */
-.poi-custom-icon {
-  filter: drop-shadow(0px 8px 6px rgba(0, 0, 0, 0.35));
-  transform-origin: center bottom;
-}
-
-/* Animation de rebond vertical lors du déplacement du pion */
+/* Animation de saut quand le joueur bouge */
 @keyframes pion-bounce {
   0% {
     translate: 0 0;
   }
   35% {
-    /* Le pion se soulève de 22px en l'air */
-    translate: 0 -22px;
-    filter: drop-shadow(0px 18px 12px rgba(0, 0, 0, 0.2));
+    translate: 0 -18px;
+    filter: drop-shadow(0px 14px 10px rgba(0, 0, 0, 0.2));
   }
   70% {
-    /* Retombée avec léger impact au sol */
     translate: 0 2px;
   }
   100% {
@@ -96,40 +60,48 @@ html, body {
   }
 }
 
-/* Classe d'animation temporaire appliquée au pion */
 .pion-bounce,
 .board-pion.is-moving {
-  animation: pion-bounce 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+  animation: pion-bounce 0.45s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
   will-change: translate, filter;
 }
 
+/* Balise POI */
+.poi-custom-icon {
+  filter: drop-shadow(0px 6px 4px rgba(0, 0, 0, 0.3));
+  transform-origin: center bottom;
+}
+
 /* ==========================================================================
-   3. Contrôles Leaflet & Accessoires UI
+   Contrôles Leaflet Mobile
    ========================================================================== */
 .leaflet-top.leaflet-left {
-  top: 75px;
-  left: 16px;
+  top: 52px;
+  left: 12px;
 }
 
 .leaflet-control-zoom {
   border: none !important;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15) !important;
-  border-radius: 14px !important;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12) !important;
+  border-radius: 12px !important;
   overflow: hidden;
 }
 
 .leaflet-control-zoom a {
+  width: 34px !important;
+  height: 34px !important;
+  line-height: 34px !important;
   background-color: rgba(255, 255, 255, 0.95) !important;
   backdrop-filter: blur(8px);
   color: #334155 !important;
   border-bottom: 1px solid #f1f5f9 !important;
 }
 
-/* Attribution discrète */
+/* Attribution très discrète */
 .leaflet-control-attribution {
-  font-size: 9px !important;
-  background: rgba(255, 255, 255, 0.75) !important;
+  font-size: 8px !important;
+  background: rgba(255, 255, 255, 0.7) !important;
   backdrop-filter: blur(4px);
-  border-radius: 6px;
-  margin: 0 6px 180px 0 !important;
+  border-radius: 4px;
+  margin: 0 4px 110px 0 !important;
 }
