@@ -1,0 +1,121 @@
+/* ==========================================================================
+   Styles personnalisés pour le prototype de Jeu de Piste GPS Mobile
+   ========================================================================== */
+
+/* Gestion des zones sécurisées (Notch / Barre d'accueil iPhone & Android) */
+.safe-top {
+  padding-top: max(0.75rem, env(safe-area-inset-top));
+}
+
+.safe-bottom {
+  padding-bottom: max(1rem, env(safe-area-inset-bottom));
+}
+
+/* Optimisation de l'affichage mobile */
+html, body {
+  height: 100%;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+#map {
+  outline: none;
+}
+
+/* Repositionnement des contrôles Leaflet pour ne pas masquer l'UI */
+.leaflet-top.leaflet-left {
+  top: 70px;
+  left: 14px;
+}
+
+.leaflet-control-zoom {
+  border: none !important;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12) !important;
+  border-radius: 14px !important;
+  overflow: hidden;
+}
+
+.leaflet-control-zoom a {
+  background-color: rgba(255, 255, 255, 0.95) !important;
+  backdrop-filter: blur(8px);
+  color: #334155 !important;
+  border-bottom: 1px solid #f1f5f9 !important;
+}
+
+/* Masquer le lien de crédit par défaut en bas pour éviter l'encombrement sur mobile (on le garde discret) */
+.leaflet-control-attribution {
+  font-size: 9px !important;
+  background: rgba(255, 255, 255, 0.7) !important;
+  backdrop-filter: blur(4px);
+  border-radius: 6px;
+  margin: 0 6px 200px 0 !important;
+}
+
+/* ==========================================================================
+   Marqueur Utilisateur GPS Dynamique (Pulsing Dot)
+   ========================================================================== */
+.user-location-marker {
+  position: relative;
+  width: 22px;
+  height: 22px;
+}
+
+.user-marker-pulse {
+  position: absolute;
+  top: -9px;
+  left: -9px;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background-color: rgba(59, 130, 246, 0.35);
+  animation: pulse-ring 2s cubic-bezier(0.215, 0.61, 0.355, 1) infinite;
+}
+
+.user-marker-core {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 22px;
+  height: 22px;
+  background-color: #2563eb;
+  border: 3px solid #ffffff;
+  border-radius: 50%;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.35);
+}
+
+@keyframes pulse-ring {
+  0% {
+    transform: scale(0.6);
+    opacity: 0.9;
+  }
+  70% {
+    transform: scale(1.6);
+    opacity: 0;
+  }
+  100% {
+    transform: scale(1.6);
+    opacity: 0;
+  }
+}
+
+/* ==========================================================================
+   Animation de Validation d'Étape
+   ========================================================================== */
+.validated-pulse {
+  animation: bounce-glow 1s ease-in-out infinite alternate;
+}
+
+@keyframes bounce-glow {
+  from {
+    transform: scale(1);
+    box-shadow: 0 0 0 rgba(16, 185, 129, 0.4);
+  }
+  to {
+    transform: scale(1.03);
+    box-shadow: 0 0 20px rgba(16, 185, 129, 0.7);
+  }
+}
+
