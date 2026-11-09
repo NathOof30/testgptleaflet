@@ -163,6 +163,27 @@
     </div>
   </main>
 
+  <!-- Modal de Victoire / Étape Suivante -->
+  <div id="modal-validation" class="fixed inset-0 z-40 bg-slate-950/70 backdrop-blur-md flex items-center justify-center p-4 hidden transition-opacity duration-300">
+    <div class="bg-white rounded-3xl max-w-sm w-full p-6 text-center shadow-2xl border border-white/40 transform transition-all scale-95 duration-300" id="modal-card">
+      <div class="w-16 h-16 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto mb-3 text-3xl shadow-inner">
+        🏆
+      </div>
+      <span id="modal-badge-tag" class="text-xs font-bold uppercase tracking-wider text-emerald-600 bg-emerald-50 px-3 py-1 rounded-full border border-emerald-200">
+        Étape 1 Validée !
+      </span>
+      <h3 id="modal-title" class="text-lg font-black text-slate-800 mt-2">
+        Stade Bollaert-Delelis
+      </h3>
+      <p id="modal-lore" class="text-xs text-slate-600 mt-2 leading-relaxed bg-slate-50 p-3 rounded-2xl border border-slate-100 text-left">
+        Inauguré en 1934, Bollaert a vibré lors des grands rendez-vous sportifs. Premier fragment débloqué !
+      </p>
+      <button id="btn-next-step" class="w-full mt-4 py-3.5 px-4 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white font-bold rounded-2xl shadow-lg shadow-emerald-500/30 transition-all flex items-center justify-center space-x-2">
+        <span id="btn-next-label">Étape suivante ➔</span>
+      </button>
+    </div>
+  </div>
+
   <!-- Script applicatif -->
   <script src="app.js"></script>
 </body>

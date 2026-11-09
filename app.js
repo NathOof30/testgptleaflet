@@ -57,6 +57,9 @@ const dom = {
   pingIndicator: document.getElementById('ping-indicator'),
   metricDistance: document.getElementById('metric-distance'),
   metricDistanceUnit: document.getElementById('metric-distance-unit'),
+  compassNeedle: document.getElementById('compass-needle'),
+  metricBearing: document.getElementById('metric-bearing'),
+  compassCardinal: document.getElementById('compass-cardinal'),
   metricAccuracy: document.getElementById('metric-accuracy'),
   accuracyLevel: document.getElementById('accuracy-level'),
   badgeValidation: document.getElementById('badge-validation'),
@@ -104,44 +107,15 @@ function initMap() {
   }, 250);
 }
 
-// --- 4.1. Configuration Graphique du Pion de Plateau ---
-// Texture SVG vectorielle autonome (aspect figurine 3D avec socle au sol)
-// Note : Vous pouvez remplacer cette URL par 'assets/pion.png' selon vos fichiers !
-const PAWN_STANDBY_SVG = "data:image/svg+xml;utf8," + encodeURIComponent(`
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 80" width="64" height="80">
-  <defs>
-    <radialGradient id="pawnBaseGrad" cx="50%" cy="50%" r="50%">
-      <stop offset="0%" stop-color="#3b82f6"/>
-      <stop offset="85%" stop-color="#1d4ed8"/>
-      <stop offset="100%" stop-color="#1e3a8a"/>
-    </radialGradient>
-    <linearGradient id="pawnBodyGrad" x1="0%" y1="0%" x2="100%" y2="0%">
-      <stop offset="0%" stop-color="#60a5fa"/>
-      <stop offset="45%" stop-color="#2563eb"/>
-      <stop offset="100%" stop-color="#1d4ed8"/>
-    </linearGradient>
-  </defs>
-  <!-- Ombre portée ovale au sol -->
-  <ellipse cx="32" cy="72" rx="20" ry="7" fill="rgba(0,0,0,0.35)"/>
-  <!-- Socle plastique/bois du pion posé à plat sur le plateau -->
-  <ellipse cx="32" cy="70" rx="18" ry="6" fill="url(#pawnBaseGrad)" stroke="#ffffff" stroke-width="2"/>
-  <!-- Corps conique évasé -->
-  <path d="M 22 70 C 24 54, 26 38, 32 34 C 38 38, 40 54, 42 70 Z" fill="url(#pawnBodyGrad)" stroke="#ffffff" stroke-width="1.5"/>
-  <!-- Bague intermédiaire -->
-  <ellipse cx="32" cy="35" rx="8" ry="3" fill="#1d4ed8" stroke="#ffffff" stroke-width="1"/>
-  <!-- Tête sphérique -->
-  <circle cx="32" cy="22" r="14" fill="url(#pawnBodyGrad)" stroke="#ffffff" stroke-width="2"/>
-  <circle cx="28" cy="18" r="4" fill="#ffffff" opacity="0.6"/>
-</svg>
-`);
-
-// Objet L.icon du pion de jeu de plateau
+// --- 4.1. Configuration Graphique du Pion Joueur (Asset pion.webp 2D) ---
+// Utilisation directe du fichier pion.webp fourni à la racine (ratio natif 170x303)
+// Affichage en 2D pur, sans déformation trapézoïdale de perspective
 const boardPawnIcon = L.icon({
-  iconUrl: PAWN_STANDBY_SVG, // ou 'assets/pion.png'
-  iconSize: [44, 60],
-  iconAnchor: [22, 60],      // Ancrage au sol : base inférieure centrée
-  popupAnchor: [0, -55],
-  className: 'board-pion'    // Reçoit la contre-rotation CSS (rotate: 1 0 0 -45deg)
+  iconUrl: 'pion.webp',
+  iconSize: [40, 71],        // Dimensions adaptées au ratio d'origine
+  iconAnchor: [20, 71],      // Ancrage au sol : base inférieure centrée
+  popupAnchor: [0, -68],
+  className: 'board-pion'    // Style 2D net avec ombre portée et rebond
 });
 
 /**
@@ -210,6 +184,31 @@ function calculateHaversineDistance(lat1, lon1, lat2, lon2) {
 
   const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
   return EARTH_RADIUS * c;
+}
+
+/**
+ * Calcule l'azimut (cap en degrés de 0 à 360°) entre deux coordonnées
+ */
+function calculateBearing(lat1, lon1, lat2, lon2) {
+  const toRad = deg => (deg * Math.PI) / 180;
+  const toDeg = rad => (rad * 180) / Math.PI;
+
+  const dLon = toRad(lon2 - lon1);
+  const y = Math.sin(dLon) * Math.cos(toRad(lat2));
+  const x =
+    Math.cos(toRad(lat1)) * Math.sin(toRad(lat2)) -
+    Math.sin(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.cos(dLon);
+
+  return (toDeg(Math.atan2(y, x)) + 360) % 360;
+}
+
+/**
+ * Convertit un angle en direction cardinale textuelle (ex: Nord, Nord-Est...)
+ */
+function getCardinalDirection(bearing) {
+  const cardinals = ["Nord", "Nord-Est", "Est", "Sud-Est", "Sud", "Sud-Ouest", "Ouest", "Nord-Ouest"];
+  const index = Math.round(bearing / 45) % 8;
+  return cardinals[index];
 }
 
 // --- 6. Gestion du Cycle de Vie de la Géolocalisation ---
@@ -468,6 +467,27 @@ function updateUiWithMetrics() {
   } else {
     dom.metricDistance.textContent = state.distanceToPoi;
     dom.metricDistanceUnit.textContent = "m";
+  }
+
+  // Calcul et affichage du cap vers la cible (Aiguille de boussole)
+  if (state.userLatLng) {
+    const bearingToPoi = Math.round(
+      calculateBearing(
+        state.userLatLng[0],
+        state.userLatLng[1],
+        CONFIG.POI_COORDS[0],
+        CONFIG.POI_COORDS[1]
+      )
+    );
+    if (dom.compassNeedle) {
+      dom.compassNeedle.style.transform = `rotate(${bearingToPoi}deg)`;
+    }
+    if (dom.metricBearing) {
+      dom.metricBearing.textContent = `${bearingToPoi}°`;
+    }
+    if (dom.compassCardinal) {
+      dom.compassCardinal.textContent = getCardinalDirection(bearingToPoi);
+    }
   }
 
   // Évaluation de la validation de zone (seuil de 30m)
