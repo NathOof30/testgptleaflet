@@ -50,11 +50,12 @@
 
   <!-- Boutons d'Action Flottants (Droite, accessibles au pouce) -->
   <div class="absolute bottom-32 right-3 z-10 flex flex-col space-y-2.5 items-end">
-    <!-- Suivre le cap / Boussole -->
-    <button id="btn-track-heading" class="w-11 h-11 bg-white/95 backdrop-blur-md text-slate-700 rounded-full shadow-lg border border-white/60 flex items-center justify-center active:scale-90 transition-all" title="Suivre le cap">
+    <!-- Suivre le cap / Boussole (3 modes : Inactif -> Boussole stabilisée -> Cap de marche GPS) -->
+    <button id="btn-track-heading" class="w-11 h-11 bg-white/95 backdrop-blur-md text-slate-700 rounded-full shadow-lg border border-white/60 flex items-center justify-center active:scale-90 transition-all relative" title="Mode d'orientation (Boussole / Cap GPS)">
       <svg id="compass-btn-icon" class="w-5 h-5 text-indigo-600 transition-transform duration-300" viewBox="0 0 24 24" fill="currentColor">
         <path d="M12 2L4.5 20.29l.71.71L12 18l6.79 3 .71-.71z"/>
       </svg>
+      <span id="heading-mode-badge" class="absolute -bottom-1 -right-1 text-[8px] font-black px-1 rounded-full bg-slate-200 text-slate-700 hidden shadow-sm"></span>
     </button>
 
     <!-- Recentrer sur le joueur -->

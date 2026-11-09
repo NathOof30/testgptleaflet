@@ -285,7 +285,37 @@ function stopGeolocation() {
  * @param {GeolocationPosition} position 
  */
 function onLocationSuccess(position) {
-  const { latitude, longitude, accuracy } = position.coords;
+  const { latitude, longitude, accuracy, speed, heading: gpsHeading } = position.coords;
+
+  // Calcul du cap réel de marche GPS (Course Over Ground)
+  if (state.userLatLng) {
+    const distMoved = calculateHaversineDistance(
+      state.userLatLng[0],
+      state.userLatLng[1],
+      latitude,
+      longitude
+    );
+
+    // Détermination de la trajectoire réelle de marche
+    if (gpsHeading !== null && !isNaN(gpsHeading) && (speed === null || speed > ORIENTATION_CONFIG.MIN_WALK_SPEED)) {
+      headingState.gpsCourse = Math.round(gpsHeading);
+    } else if (distMoved >= ORIENTATION_CONFIG.MIN_DISPLACEMENT) {
+      headingState.gpsCourse = Math.round(
+        calculateBearing(
+          state.userLatLng[0],
+          state.userLatLng[1],
+          latitude,
+          longitude
+        )
+      );
+    }
+
+    // Si le mode "Cap de marche GPS" est actif, orienter la carte selon la trajectoire réelle
+    if (headingState.isTracking && headingState.mode === 'course' && headingState.gpsCourse !== null) {
+      applyMapBearing(headingState.gpsCourse);
+    }
+  }
+
   state.userLatLng = [latitude, longitude];
   state.userAccuracy = Math.round(accuracy);
 
@@ -570,13 +600,47 @@ function toggleSimulation() {
   }
 }
 
-// --- 12. Gestion de l'Orientation et du Suivi de Cap (DeviceOrientation & Bearing) ---
+// --- 12. Gestion de l'Orientation, Stabilisation (Deadband) & Cap de Marche ---
+
+const ORIENTATION_CONFIG = {
+  DEADBAND_ANGLE: 10,       // Seuil de zone morte (en degrés) pour ignorer les balancements de marche
+  IDLE_RESET_DELAY: 1500,   // 1.5s d'inactivité avant de réaligner la référence en douceur
+  MIN_WALK_SPEED: 0.6,      // Vitesse minimale (m/s) pour activer le cap de marche GPS (~2.2 km/h)
+  MIN_DISPLACEMENT: 3       // Déplacement minimal en mètres pour recalculer le cap GPS
+};
 
 const headingState = {
   isTracking: false,
-  currentHeading: 0,
+  mode: 'compass',          // 'compass' (boussole stabilisée) ou 'course' (direction réelle de marche)
+  referenceHeading: null,   // Angle de référence pour le deadband
+  currentBearing: 0,        // Cap appliqué à Leaflet
+  idleTimer: null,          // Timer de 1.5s d'inactivité
+  gpsCourse: null,          // Cap calculé à partir de la trajectoire GPS
   orientationHandler: null
 };
+
+/**
+ * Calcule la plus petite différence angulaire signée (-180° à +180°) sur tore modulaire 360°
+ */
+function getShortestAngularDistance(from, to) {
+  return ((to - from + 540) % 360) - 180;
+}
+
+/**
+ * Applique l'orientation à Leaflet avec centrage utilisateur et rotation de l'icône
+ */
+function applyMapBearing(bearing) {
+  headingState.currentBearing = bearing;
+  state.map.setBearing(bearing);
+
+  if (state.userLatLng) {
+    state.map.panTo(state.userLatLng, { animate: false });
+  }
+
+  if (dom.compassBtnIcon) {
+    dom.compassBtnIcon.style.transform = `rotate(${-bearing}deg)`;
+  }
+}
 
 /**
  * Demande de permission pour accéder à la boussole mobile (Requis pour iOS 13+)
@@ -599,11 +663,9 @@ async function requestOrientationPermission() {
  * Extrait le cap magnétique (0-360°) selon la plateforme (iOS vs Android)
  */
 function getCompassHeading(event) {
-  // iOS Safari : fournit directement le cap boussole magnétique
   if (typeof event.webkitCompassHeading !== 'undefined') {
     return event.webkitCompassHeading;
   }
-  // Android : calcul à partir de la valeur alpha
   if (event.alpha !== null) {
     return (360 - event.alpha) % 360;
   }
@@ -611,55 +673,96 @@ function getCompassHeading(event) {
 }
 
 /**
- * Callback de mise à jour de l'orientation : oriente la carte en mode "Heading Up"
+ * Callback boussole avec zone morte de sécurité (Deadband) et timer de 1.5s
  */
 function onDeviceOrientation(event) {
   if (!headingState.isTracking) return;
 
-  const heading = getCompassHeading(event);
-  if (heading === null) return;
+  // Si on est en mode 'course' (direction réelle de marche GPS), la boussole n'influence pas la carte
+  if (headingState.mode === 'course') {
+    return;
+  }
 
-  // Filtrage du jitter (seuil minimal de 1.5° de changement)
-  const diff = Math.abs(heading - headingState.currentHeading);
-  if (diff > 1.5) {
-    headingState.currentHeading = heading;
+  const rawHeading = getCompassHeading(event);
+  if (rawHeading === null) return;
 
-    // Tourne la carte Leaflet pour que le cap regardé pointe vers le haut de l'écran
-    state.map.setBearing(heading);
+  // Initialisation de la référence au premier événement
+  if (headingState.referenceHeading === null) {
+    headingState.referenceHeading = rawHeading;
+    applyMapBearing(rawHeading);
+    return;
+  }
 
-    // Maintien du centrage sur l'utilisateur s'il est localisé
-    if (state.userLatLng) {
-      state.map.panTo(state.userLatLng, { animate: false });
+  // Écart angulaire par rapport à la référence actuelle
+  const delta = getShortestAngularDistance(headingState.referenceHeading, rawHeading);
+
+  // 1. Si la rotation dépasse la marge de sécurité (vrai pivot de l'utilisateur)
+  if (Math.abs(delta) > ORIENTATION_CONFIG.DEADBAND_ANGLE) {
+    // Annuler le timer de repos car l'utilisateur est en train de tourner
+    if (headingState.idleTimer) {
+      clearTimeout(headingState.idleTimer);
+      headingState.idleTimer = null;
     }
 
-    // Animation de l'icône de boussole sur le bouton
-    if (dom.compassBtnIcon) {
-      dom.compassBtnIcon.style.transform = `rotate(${-heading}deg)`;
+    // Réaligner la référence et la carte
+    headingState.referenceHeading = rawHeading;
+    applyMapBearing(rawHeading);
+  } else {
+    // 2. Si l'angle oscille dans la marge de sécurité (balancement naturel de la marche) :
+    // On ne bouge PAS la carte !
+    // Si aucun timer de repos n'est actif, lancer la temporisation de 1.5s
+    if (!headingState.idleTimer) {
+      headingState.idleTimer = setTimeout(() => {
+        // Au bout de 1.5s de repos, la nouvelle orientation devient la référence sans à-coup
+        headingState.referenceHeading = rawHeading;
+        applyMapBearing(rawHeading);
+        headingState.idleTimer = null;
+      }, ORIENTATION_CONFIG.IDLE_RESET_DELAY);
     }
   }
 }
 
 /**
- * Bascule l'activation du mode "Recentrer et Suivre le cap"
+ * Bascule cyclique entre : Inactif -> Boussole Stabilisée -> Cap de Marche GPS -> Inactif
  */
-async function toggleHeadingTracking() {
-  if (headingState.isTracking) {
-    stopHeadingTracking();
+async function cycleHeadingMode() {
+  if (!headingState.isTracking) {
+    // Étape 1 : Activer la boussole stabilisée (Marge 10°)
+    headingState.mode = 'compass';
+    const started = await startHeadingTracking();
+    if (started) {
+      showToast("🧭 Boussole stabilisée (marge 10°)");
+    }
+  } else if (headingState.mode === 'compass') {
+    // Étape 2 : Basculer vers le cap réel de marche GPS
+    headingState.mode = 'course';
+    if (headingState.idleTimer) {
+      clearTimeout(headingState.idleTimer);
+      headingState.idleTimer = null;
+    }
+    // Si un cap de marche GPS est déjà connu, l'appliquer immédiatement
+    if (headingState.gpsCourse !== null) {
+      applyMapBearing(headingState.gpsCourse);
+    }
+    updateHeadingButtonUi();
+    showToast("🚶 Cap de marche GPS actif");
   } else {
-    await startHeadingTracking();
+    // Étape 3 : Désactivation
+    stopHeadingTracking();
+    showToast("Suivi désactivé");
   }
 }
 
 async function startHeadingTracking() {
   const allowed = await requestOrientationPermission();
   if (!allowed) {
-    showError("Boussole désactivée", "L'accès aux capteurs d'orientation du smartphone est nécessaire pour suivre le cap.");
-    return;
+    showError("Boussole désactivée", "L'accès aux capteurs d'orientation du smartphone est nécessaire.");
+    return false;
   }
 
   headingState.isTracking = true;
+  headingState.referenceHeading = null;
 
-  // Choix de l'événement le plus précis (boussole absolue Android si disponible)
   const eventName = ('ondeviceorientationabsolute' in window)
     ? 'deviceorientationabsolute'
     : 'deviceorientation';
@@ -667,18 +770,24 @@ async function startHeadingTracking() {
   headingState.orientationHandler = onDeviceOrientation;
   window.addEventListener(eventName, headingState.orientationHandler, true);
 
-  // Recentrage initial sur la position utilisateur
   if (state.userLatLng) {
     state.map.setView(state.userLatLng, 17, { animate: true });
   }
 
-  updateHeadingButtonUi(true);
+  updateHeadingButtonUi();
+  return true;
 }
 
 function stopHeadingTracking() {
   if (!headingState.isTracking) return;
 
   headingState.isTracking = false;
+  headingState.referenceHeading = null;
+
+  if (headingState.idleTimer) {
+    clearTimeout(headingState.idleTimer);
+    headingState.idleTimer = null;
+  }
 
   const eventName = ('ondeviceorientationabsolute' in window)
     ? 'deviceorientationabsolute'
@@ -689,24 +798,72 @@ function stopHeadingTracking() {
     headingState.orientationHandler = null;
   }
 
-  updateHeadingButtonUi(false);
+  updateHeadingButtonUi();
 }
 
-function updateHeadingButtonUi(isActive) {
+function updateHeadingButtonUi() {
   if (!dom.btnTrackHeading) return;
 
-  if (isActive) {
-    dom.btnTrackHeading.className = "w-11 h-11 bg-indigo-600 text-white rounded-full shadow-lg shadow-indigo-500/30 border border-indigo-400 flex items-center justify-center active:scale-90 transition-all";
-    if (dom.compassBtnIcon) {
-      dom.compassBtnIcon.className = "w-5 h-5 text-amber-300 transition-transform duration-150";
-    }
-  } else {
-    dom.btnTrackHeading.className = "w-11 h-11 bg-white/95 backdrop-blur-md text-slate-700 rounded-full shadow-lg border border-white/60 flex items-center justify-center active:scale-90 transition-all hover:bg-white";
+  const badge = document.getElementById('heading-mode-badge');
+
+  if (!headingState.isTracking) {
+    // État 1 : Inactif
+    dom.btnTrackHeading.className = "w-11 h-11 bg-white/95 backdrop-blur-md text-slate-700 rounded-full shadow-lg border border-white/60 flex items-center justify-center active:scale-90 transition-all hover:bg-white relative";
     if (dom.compassBtnIcon) {
       dom.compassBtnIcon.className = "w-5 h-5 text-indigo-600 transition-transform duration-300";
       dom.compassBtnIcon.style.transform = "rotate(0deg)";
     }
+    if (badge) badge.classList.add('hidden');
+    dom.btnTrackHeading.title = "Activer le suivi de cap";
+  } else if (headingState.mode === 'compass') {
+    // État 2 : Boussole Stabilisée (Deadband 10°)
+    dom.btnTrackHeading.className = "w-11 h-11 bg-indigo-600 text-white rounded-full shadow-lg shadow-indigo-500/30 border border-indigo-400 flex items-center justify-center active:scale-90 transition-all relative";
+    if (dom.compassBtnIcon) {
+      dom.compassBtnIcon.className = "w-5 h-5 text-amber-300 transition-transform duration-150";
+    }
+    if (badge) {
+      badge.textContent = "COMP";
+      badge.className = "absolute -bottom-1 -right-1 text-[8px] font-black px-1 rounded-full bg-amber-400 text-slate-900 shadow-sm";
+      badge.classList.remove('hidden');
+    }
+    dom.btnTrackHeading.title = "Mode Boussole stabilisée (cliquer pour Cap de marche GPS)";
+  } else if (headingState.mode === 'course') {
+    // État 3 : Cap de Marche GPS (Trajectoire réelle)
+    dom.btnTrackHeading.className = "w-11 h-11 bg-emerald-600 text-white rounded-full shadow-lg shadow-emerald-500/30 border border-emerald-400 flex items-center justify-center active:scale-90 transition-all relative";
+    if (dom.compassBtnIcon) {
+      dom.compassBtnIcon.className = "w-5 h-5 text-white transition-transform duration-150";
+    }
+    if (badge) {
+      badge.textContent = "GPS";
+      badge.className = "absolute -bottom-1 -right-1 text-[8px] font-black px-1 rounded-full bg-emerald-200 text-emerald-900 shadow-sm";
+      badge.classList.remove('hidden');
+    }
+    dom.btnTrackHeading.title = "Mode Cap de marche GPS (cliquer pour désactiver)";
   }
+}
+
+/**
+ * Affiche une infobulle toast éphémère au centre de l'écran
+ */
+let toastTimeout = null;
+function showToast(message) {
+  let toast = document.getElementById('hud-toast');
+  if (!toast) {
+    toast = document.createElement('div');
+    toast.id = 'hud-toast';
+    toast.className = 'fixed top-12 left-1/2 -translate-x-1/2 z-30 bg-slate-900/90 backdrop-blur-md text-white text-[11px] font-semibold px-3 py-1.5 rounded-full shadow-lg border border-white/20 transition-all duration-300 pointer-events-none opacity-0';
+    document.body.appendChild(toast);
+  }
+
+  toast.textContent = message;
+  toast.classList.remove('opacity-0', '-translate-y-2');
+  toast.classList.add('opacity-100', 'translate-y-0');
+
+  if (toastTimeout) clearTimeout(toastTimeout);
+  toastTimeout = setTimeout(() => {
+    toast.classList.remove('opacity-100', 'translate-y-0');
+    toast.classList.add('opacity-0', '-translate-y-2');
+  }, 2200);
 }
 
 // --- 13. Attachement des Événements ---
@@ -718,7 +875,7 @@ document.addEventListener('DOMContentLoaded', () => {
   dom.btnCloseError.addEventListener('click', hideError);
 
   if (dom.btnTrackHeading) {
-    dom.btnTrackHeading.addEventListener('click', toggleHeadingTracking);
+    dom.btnTrackHeading.addEventListener('click', cycleHeadingMode);
   }
 
   if (dom.btnSimulatePoi) {
