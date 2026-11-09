@@ -48,6 +48,9 @@ const state = {
 const dom = {
   btnToggleGps: document.getElementById('btn-toggle-gps'),
   btnRecenter: document.getElementById('btn-recenter'),
+  btnTrackHeading: document.getElementById('btn-track-heading'),
+  compassBtnIcon: document.getElementById('compass-btn-icon'),
+  headingBtnText: document.getElementById('heading-btn-text'),
   btnLabel: document.getElementById('btn-label'),
   headerStatus: document.getElementById('header-status'),
   statusDot: document.getElementById('status-dot'),
@@ -65,12 +68,17 @@ const dom = {
   btnCloseError: document.getElementById('btn-close-error')
 };
 
-// --- 4. Initialisation de la Carte Leaflet ---
+// --- 4. Initialisation de la Carte Leaflet (avec Plugin Leaflet-Rotate) ---
 function initMap() {
-  // Initialisation de l'instance Leaflet
+  // Initialisation de l'instance Leaflet avec rotation tactile & logicielle
   state.map = L.map('map', {
     zoomControl: true,
-    attributionControl: true
+    attributionControl: true,
+    // Options Leaflet-Rotate
+    rotate: true,             // Active le moteur de rotation de carte
+    touchRotate: true,        // Permet la rotation manuelle à deux doigts (pinch/rotate)
+    rotateControl: false,     // Masque le contrôle par défaut au profit de notre bouton custom
+    bearing: 0                // Cap initial à 0° (Nord en haut)
   }).setView(CONFIG.MAP_CENTER, CONFIG.DEFAULT_ZOOM);
 
   // Couche de tuiles OpenStreetMap
@@ -78,6 +86,14 @@ function initMap() {
     maxZoom: 19,
     attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
   }).addTo(state.map);
+
+  // Interruption automatique du suivi de cap si l'utilisateur manipule manuellement la carte
+  state.map.on('dragstart zoomstart rotatestart', () => {
+    if (headingState.isTracking) {
+      console.log("Interaction manuelle détectée : arrêt du mode suivi de cap.");
+      stopHeadingTracking();
+    }
+  });
 
   // Création du Point d'Intérêt (POI) - Stade Bollaert
   setupPoiLayer();
@@ -568,13 +584,164 @@ function toggleSimulation() {
   }
 }
 
-// --- 12. Attachement des Événements ---
+// --- 12. Gestion de l'Orientation et du Suivi de Cap (DeviceOrientation & Bearing) ---
+
+const headingState = {
+  isTracking: false,
+  currentHeading: 0,
+  orientationHandler: null
+};
+
+/**
+ * Demande de permission pour accéder à la boussole mobile (Requis pour iOS 13+)
+ */
+async function requestOrientationPermission() {
+  if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
+    try {
+      const permissionState = await DeviceOrientationEvent.requestPermission();
+      return permissionState === 'granted';
+    } catch (err) {
+      console.warn("Erreur permission DeviceOrientation :", err);
+      return false;
+    }
+  }
+  // Android et autres navigateurs : permission implicite
+  return true;
+}
+
+/**
+ * Extrait le cap magnétique (0-360°) selon la plateforme (iOS vs Android)
+ */
+function getCompassHeading(event) {
+  // iOS Safari : fournit directement le cap boussole magnétique
+  if (typeof event.webkitCompassHeading !== 'undefined') {
+    return event.webkitCompassHeading;
+  }
+  // Android : calcul à partir de la valeur alpha
+  if (event.alpha !== null) {
+    return (360 - event.alpha) % 360;
+  }
+  return null;
+}
+
+/**
+ * Callback de mise à jour de l'orientation : oriente la carte en mode "Heading Up"
+ */
+function onDeviceOrientation(event) {
+  if (!headingState.isTracking) return;
+
+  const heading = getCompassHeading(event);
+  if (heading === null) return;
+
+  // Filtrage du jitter (seuil minimal de 1.5° de changement)
+  const diff = Math.abs(heading - headingState.currentHeading);
+  if (diff > 1.5) {
+    headingState.currentHeading = heading;
+
+    // Tourne la carte Leaflet pour que le cap regardé pointe vers le haut de l'écran
+    state.map.setBearing(heading);
+
+    // Maintien du centrage sur l'utilisateur s'il est localisé
+    if (state.userLatLng) {
+      state.map.panTo(state.userLatLng, { animate: false });
+    }
+
+    // Animation de l'icône de boussole sur le bouton
+    if (dom.compassBtnIcon) {
+      dom.compassBtnIcon.style.transform = `rotate(${-heading}deg)`;
+    }
+  }
+}
+
+/**
+ * Bascule l'activation du mode "Recentrer et Suivre le cap"
+ */
+async function toggleHeadingTracking() {
+  if (headingState.isTracking) {
+    stopHeadingTracking();
+  } else {
+    await startHeadingTracking();
+  }
+}
+
+async function startHeadingTracking() {
+  const allowed = await requestOrientationPermission();
+  if (!allowed) {
+    showError("Boussole désactivée", "L'accès aux capteurs d'orientation du smartphone est nécessaire pour suivre le cap.");
+    return;
+  }
+
+  headingState.isTracking = true;
+
+  // Choix de l'événement le plus précis (boussole absolue Android si disponible)
+  const eventName = ('ondeviceorientationabsolute' in window)
+    ? 'deviceorientationabsolute'
+    : 'deviceorientation';
+
+  headingState.orientationHandler = onDeviceOrientation;
+  window.addEventListener(eventName, headingState.orientationHandler, true);
+
+  // Recentrage initial sur la position utilisateur
+  if (state.userLatLng) {
+    state.map.setView(state.userLatLng, 17, { animate: true });
+  }
+
+  updateHeadingButtonUi(true);
+}
+
+function stopHeadingTracking() {
+  if (!headingState.isTracking) return;
+
+  headingState.isTracking = false;
+
+  const eventName = ('ondeviceorientationabsolute' in window)
+    ? 'deviceorientationabsolute'
+    : 'deviceorientation';
+
+  if (headingState.orientationHandler) {
+    window.removeEventListener(eventName, headingState.orientationHandler, true);
+    headingState.orientationHandler = null;
+  }
+
+  updateHeadingButtonUi(false);
+}
+
+function updateHeadingButtonUi(isActive) {
+  if (!dom.btnTrackHeading) return;
+
+  if (isActive) {
+    dom.btnTrackHeading.className = "px-3.5 py-2.5 bg-indigo-600 text-white rounded-2xl shadow-lg shadow-indigo-500/30 border border-indigo-400 flex items-center space-x-2 active:scale-95 transition-all";
+    if (dom.headingBtnText) {
+      dom.headingBtnText.textContent = "Cap actif";
+      dom.headingBtnText.className = "text-xs font-bold text-white";
+    }
+    if (dom.compassBtnIcon) {
+      dom.compassBtnIcon.className = "w-4 h-4 text-amber-300 transition-transform duration-150";
+    }
+  } else {
+    dom.btnTrackHeading.className = "px-3.5 py-2.5 bg-white/95 backdrop-blur-md text-slate-700 rounded-2xl shadow-lg border border-white/60 flex items-center space-x-2 active:scale-95 transition-all hover:bg-white";
+    if (dom.headingBtnText) {
+      dom.headingBtnText.textContent = "Suivre le cap";
+      dom.headingBtnText.className = "text-xs font-bold text-slate-700";
+    }
+    if (dom.compassBtnIcon) {
+      dom.compassBtnIcon.className = "w-4 h-4 text-indigo-600 transition-transform duration-300";
+      dom.compassBtnIcon.style.transform = "rotate(0deg)";
+    }
+  }
+}
+
+// --- 13. Attachement des Événements ---
 document.addEventListener('DOMContentLoaded', () => {
   initMap();
 
   dom.btnToggleGps.addEventListener('click', toggleGeolocation);
   dom.btnRecenter.addEventListener('click', centerOnUser);
   dom.btnCloseError.addEventListener('click', hideError);
+
+  if (dom.btnTrackHeading) {
+    dom.btnTrackHeading.addEventListener('click', toggleHeadingTracking);
+  }
 
   if (dom.btnSimulatePoi) {
     dom.btnSimulatePoi.addEventListener('click', toggleSimulation);
