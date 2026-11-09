@@ -329,16 +329,29 @@ function onLocationError(error) {
 // --- 8. Mises à jour Graphiques Leaflet ---
 
 /**
- * Animation de saut physique le long de l'axe vertical du pion
+ * Déclenche l'animation de rebond vertical du pion lors d'un déplacement
+ * @param {L.Marker} marker - Instance du marqueur Leaflet représentant le pion
  */
-function animatePawnHop(marker) {
+function animatePion(marker) {
   if (!marker) return;
-  const el = marker.getElement();
-  if (!el) return;
-  el.classList.remove('is-moving');
-  void el.offsetWidth; // Force le recalcul pour rejouer l'animation
-  el.classList.add('is-moving');
+
+  const element = marker.getElement();
+  if (!element) return;
+
+  // 1. Retrait de la classe d'animation si elle était déjà active
+  element.classList.remove('pion-bounce');
+
+  // 2. Astuce Senior : Forcer un recalcul synchrone du layout (Forced Reflow)
+  // L'accès à une propriété géométrique comme offsetWidth force le moteur de rendu
+  // du navigateur à vider sa file, ce qui réinitialise la timeline CSS à 0%.
+  void element.offsetWidth;
+
+  // 3. Réapplication de la classe pour relancer immédiatement le rebond
+  element.classList.add('pion-bounce');
 }
+
+// Alias pour compatibilité interne
+const animatePawnHop = animatePion;
 
 /**
  * Met à jour ou instancie le pion 3D du joueur et le cercle de précision
