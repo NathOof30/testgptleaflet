@@ -57,6 +57,8 @@ const dom = {
   metricAccuracy: document.getElementById('metric-accuracy'),
   accuracyLevel: document.getElementById('accuracy-level'),
   badgeValidation: document.getElementById('badge-validation'),
+  btnSimulatePoi: document.getElementById('btn-simulate-poi'),
+  simulateLabel: document.getElementById('simulate-label'),
   errorBanner: document.getElementById('error-banner'),
   errorTitle: document.getElementById('error-title'),
   errorMsg: document.getElementById('error-msg'),
@@ -184,6 +186,7 @@ function startGeolocation() {
 
   // Mise à jour de l'UI en état "Recherche..."
   updateUiStarting();
+  requestWakeLock();
 
   // Démarrage du suivi continu haute précision
   state.watchId = navigator.geolocation.watchPosition(
@@ -205,6 +208,7 @@ function stopGeolocation() {
   }
   state.isTracking = false;
   state.hasInitialCentered = false;
+  releaseWakeLock();
 
   // Mise à jour de l'UI
   dom.btnLabel.textContent = "Activer la géolocalisation";
@@ -449,12 +453,68 @@ function hideError() {
   dom.errorBanner.classList.add('hidden');
 }
 
-// --- 10. Attachement des Événements ---
+// --- 10. Gestion du Maintien de l'Écran (Wake Lock API) ---
+let wakeLock = null;
+
+async function requestWakeLock() {
+  if ('wakeLock' in navigator) {
+    try {
+      wakeLock = await navigator.wakeLock.request('screen');
+    } catch (err) {
+      console.warn("WakeLock non disponible :", err.message);
+    }
+  }
+}
+
+function releaseWakeLock() {
+  if (wakeLock) {
+    wakeLock.release().then(() => { wakeLock = null; });
+  }
+}
+
+// --- 11. Mode Simulation / Débogage (pour tester en amphi ou chez soi) ---
+let isSimulatedAtPoi = false;
+
+function toggleSimulation() {
+  // Désactive le GPS réel si actif
+  if (state.isTracking) {
+    stopGeolocation();
+  }
+
+  isSimulatedAtPoi = !isSimulatedAtPoi;
+
+  // Si activé : coordonnées à ~18m de Bollaert. Sinon : Centre-ville de Lens (~1.4km)
+  const simulatedCoords = isSimulatedAtPoi
+    ? {
+        latitude: CONFIG.POI_COORDS[0] + 0.00015,
+        longitude: CONFIG.POI_COORDS[1],
+        accuracy: 8
+      }
+    : {
+        latitude: CONFIG.MAP_CENTER[0],
+        longitude: CONFIG.MAP_CENTER[1],
+        accuracy: 15
+      };
+
+  onLocationSuccess({ coords: simulatedCoords });
+
+  if (dom.simulateLabel) {
+    dom.simulateLabel.textContent = isSimulatedAtPoi
+      ? "Réinitialiser (Lens Centre)"
+      : "Simuler arrivée (20m)";
+  }
+}
+
+// --- 12. Attachement des Événements ---
 document.addEventListener('DOMContentLoaded', () => {
   initMap();
 
   dom.btnToggleGps.addEventListener('click', toggleGeolocation);
   dom.btnRecenter.addEventListener('click', centerOnUser);
   dom.btnCloseError.addEventListener('click', hideError);
+
+  if (dom.btnSimulatePoi) {
+    dom.btnSimulatePoi.addEventListener('click', toggleSimulation);
+  }
 });
 
