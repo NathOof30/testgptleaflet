@@ -627,18 +627,28 @@ function getShortestAngularDistance(from, to) {
 }
 
 /**
- * Applique l'orientation à Leaflet avec centrage utilisateur et rotation de l'icône
+ * Applique l'orientation à Leaflet avec centrage utilisateur et rotation de l'icône.
+ * En mode Heading-Up ("cap vers le haut"), pour qu'un cap physique H pointe vers
+ * le haut de l'écran (12h), la carte doit tourner dans le sens anti-horaire.
+ * Leaflet-Rotate tournant dans le sens horaire pour un angle positif,
+ * l'angle de rotation appliqué est : mapBearing = (360 - H) % 360.
+ * 
+ * @param {number} heading Cap physique regardé ou suivi (0-360°)
  */
-function applyMapBearing(bearing) {
-  headingState.currentBearing = bearing;
-  state.map.setBearing(bearing);
+function applyMapBearing(heading) {
+  headingState.currentHeading = heading;
+
+  // Inversion pour orienter le cap suivi vers le haut de l'écran (sens anti-horaire)
+  const mapBearing = (360 - (Math.round(heading) % 360)) % 360;
+  state.map.setBearing(mapBearing);
 
   if (state.userLatLng) {
     state.map.panTo(state.userLatLng, { animate: false });
   }
 
   if (dom.compassBtnIcon) {
-    dom.compassBtnIcon.style.transform = `rotate(${-bearing}deg)`;
+    // L'aiguille de boussole pointe vers le Nord réel sur l'écran
+    dom.compassBtnIcon.style.transform = `rotate(${-heading}deg)`;
   }
 }
 
@@ -749,7 +759,8 @@ async function cycleHeadingMode() {
   } else {
     // Étape 3 : Désactivation
     stopHeadingTracking();
-    showToast("Suivi désactivé");
+    state.map.setBearing(0); // Rétablit le Nord vers le haut
+    showToast("Suivi désactivé (Nord en haut)");
   }
 }
 
