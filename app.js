@@ -81,31 +81,79 @@ function initMap() {
 
   // Création du Point d'Intérêt (POI) - Stade Bollaert
   setupPoiLayer();
+
+  // Recalcul de la géométrie de la carte après application de la perspective 3D
+  setTimeout(() => {
+    state.map.invalidateSize();
+  }, 250);
 }
+
+// --- 4.1. Configuration Graphique du Pion de Plateau ---
+// Texture SVG vectorielle autonome (aspect figurine 3D avec socle au sol)
+// Note : Vous pouvez remplacer cette URL par 'assets/pion.png' selon vos fichiers !
+const PAWN_STANDBY_SVG = "data:image/svg+xml;utf8," + encodeURIComponent(`
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 80" width="64" height="80">
+  <defs>
+    <radialGradient id="pawnBaseGrad" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#3b82f6"/>
+      <stop offset="85%" stop-color="#1d4ed8"/>
+      <stop offset="100%" stop-color="#1e3a8a"/>
+    </radialGradient>
+    <linearGradient id="pawnBodyGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#60a5fa"/>
+      <stop offset="45%" stop-color="#2563eb"/>
+      <stop offset="100%" stop-color="#1d4ed8"/>
+    </linearGradient>
+  </defs>
+  <!-- Ombre portée ovale au sol -->
+  <ellipse cx="32" cy="72" rx="20" ry="7" fill="rgba(0,0,0,0.35)"/>
+  <!-- Socle plastique/bois du pion posé à plat sur le plateau -->
+  <ellipse cx="32" cy="70" rx="18" ry="6" fill="url(#pawnBaseGrad)" stroke="#ffffff" stroke-width="2"/>
+  <!-- Corps conique évasé -->
+  <path d="M 22 70 C 24 54, 26 38, 32 34 C 38 38, 40 54, 42 70 Z" fill="url(#pawnBodyGrad)" stroke="#ffffff" stroke-width="1.5"/>
+  <!-- Bague intermédiaire -->
+  <ellipse cx="32" cy="35" rx="8" ry="3" fill="#1d4ed8" stroke="#ffffff" stroke-width="1"/>
+  <!-- Tête sphérique -->
+  <circle cx="32" cy="22" r="14" fill="url(#pawnBodyGrad)" stroke="#ffffff" stroke-width="2"/>
+  <circle cx="28" cy="18" r="4" fill="#ffffff" opacity="0.6"/>
+</svg>
+`);
+
+// Objet L.icon du pion de jeu de plateau
+const boardPawnIcon = L.icon({
+  iconUrl: PAWN_STANDBY_SVG, // ou 'assets/pion.png'
+  iconSize: [44, 60],
+  iconAnchor: [22, 60],      // Ancrage au sol : base inférieure centrée
+  popupAnchor: [0, -55],
+  className: 'board-pion'    // Reçoit la contre-rotation CSS (rotate: 1 0 0 -45deg)
+});
 
 /**
  * Configure et affiche le marqueur et la zone de validation (cercle de 30m) du POI
  */
 function setupPoiLayer() {
-  // Icône personnalisée pour le POI (balise rouge/or)
+  // Icône personnalisée pour le POI (balise / fanion redressé sur le plateau)
   const poiIcon = L.divIcon({
     className: 'poi-custom-icon',
     html: `
-      <div class="relative flex items-center justify-center">
-        <span class="absolute -top-7 px-2 py-0.5 bg-slate-900/90 text-white text-[10px] font-bold rounded shadow-md whitespace-nowrap">
+      <div class="relative flex flex-col items-center justify-end">
+        <span class="px-2.5 py-0.5 mb-1 bg-slate-900/90 text-white text-[10px] font-bold rounded-lg shadow-md whitespace-nowrap border border-white/20">
           ${CONFIG.POI_NAME}
         </span>
-        <svg class="w-8 h-8 text-rose-600 drop-shadow-md" fill="currentColor" viewBox="0 0 24 24">
+        <svg class="w-10 h-10 text-rose-600 drop-shadow-lg" fill="currentColor" viewBox="0 0 24 24">
           <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/>
         </svg>
       </div>
     `,
-    iconSize: [32, 32],
-    iconAnchor: [16, 32]
+    iconSize: [36, 48],
+    iconAnchor: [18, 48]
   });
 
   // Marqueur fixe
-  state.poiMarker = L.marker(CONFIG.POI_COORDS, { icon: poiIcon })
+  state.poiMarker = L.marker(CONFIG.POI_COORDS, { 
+    icon: poiIcon,
+    zIndexOffset: 500
+  })
     .addTo(state.map)
     .bindPopup(`<strong>${CONFIG.POI_NAME}</strong><br>Rayon de validation : ${CONFIG.VALIDATION_RADIUS} m`);
 
@@ -114,7 +162,7 @@ function setupPoiLayer() {
     radius: CONFIG.VALIDATION_RADIUS,
     color: '#e11d48',        // Bordure rouge (Rose-600)
     fillColor: '#f43f5e',    // Remplissage rose semi-transparent
-    fillOpacity: 0.18,
+    fillOpacity: 0.22,
     weight: 2,
     dashArray: '5, 8'        // Ligne pointillée
   }).addTo(state.map);
@@ -281,31 +329,31 @@ function onLocationError(error) {
 // --- 8. Mises à jour Graphiques Leaflet ---
 
 /**
- * Met à jour ou instancie le point bleu dynamique et le cercle d'incertitude
+ * Animation de saut physique le long de l'axe vertical du pion
+ */
+function animatePawnHop(marker) {
+  if (!marker) return;
+  const el = marker.getElement();
+  if (!el) return;
+  el.classList.remove('is-moving');
+  void el.offsetWidth; // Force le recalcul pour rejouer l'animation
+  el.classList.add('is-moving');
+}
+
+/**
+ * Met à jour ou instancie le pion 3D du joueur et le cercle de précision
  */
 function updateMapUserLayer(lat, lon, accuracy) {
   const latLng = [lat, lon];
 
   if (!state.userMarker) {
-    // Création de l'icône personnalisée avec effet de pulsation radar
-    const userIcon = L.divIcon({
-      className: 'user-marker-container',
-      html: `
-        <div class="user-location-marker">
-          <div class="user-marker-pulse"></div>
-          <div class="user-marker-core"></div>
-        </div>
-      `,
-      iconSize: [22, 22],
-      iconAnchor: [11, 11]
-    });
-
+    // Instanciation initiale du pion de jeu de plateau
     state.userMarker = L.marker(latLng, {
-      icon: userIcon,
+      icon: boardPawnIcon,
       zIndexOffset: 1000 // Toujours au-dessus des autres éléments
     }).addTo(state.map);
 
-    // Cercle d'imprécision GPS (bleu clair)
+    // Cercle d'imprécision GPS (projeté à plat sur le plateau)
     state.userAccuracyCircle = L.circle(latLng, {
       radius: accuracy,
       color: '#3b82f6',
@@ -314,11 +362,13 @@ function updateMapUserLayer(lat, lon, accuracy) {
       weight: 1
     }).addTo(state.map);
 
+    animatePawnHop(state.userMarker);
   } else {
-    // Déplacement fluide des couches existantes
+    // Déplacement avec animation de saut de case
     state.userMarker.setLatLng(latLng);
     state.userAccuracyCircle.setLatLng(latLng);
     state.userAccuracyCircle.setRadius(accuracy);
+    animatePawnHop(state.userMarker);
   }
 }
 

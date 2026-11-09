@@ -23,8 +23,11 @@
 </head>
 <body class="h-full w-full overflow-hidden select-none bg-slate-900 font-sans text-slate-800 antialiased">
 
-  <!-- Conteneur Carte Leaflet -->
-  <div id="map" class="absolute inset-0 z-0 h-full w-full"></div>
+  <!-- Conteneur Vue 3D "Jeu de Plateau" -->
+  <div class="board-viewport">
+    <div id="map"></div>
+    <div class="tilt-shift-fog"></div>
+  </div>
 
   <!-- En-tête / Barre supérieure -->
   <header class="safe-top absolute top-0 left-0 right-0 z-10 p-3 pointer-events-none">
